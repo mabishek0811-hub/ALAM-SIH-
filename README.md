@@ -15,6 +15,9 @@ ALAM is a bilingual prototype for Tamil Nadu's bittern resource routing and aggr
 - Economic impact scenario model and potential environmental benefit view
 - English and Tamil interface dictionaries with instant language switching
 - Browser text-to-speech voice help with Tamil voice selection where supported
+- Persistent buyer requirements, offer negotiation and delivery status workflow
+- Interactive notifications, marketplace filters, producer performance and verification views
+- Transaction traceability records with QR-ready batch identity cues
 - SIH demo journey controls and reset demo action
 - Responsive desktop, tablet and mobile UI
 
@@ -26,6 +29,10 @@ npm run dev
 ```
 
 Open the Vite URL shown in the terminal.
+
+## Optional AI voice answers
+
+The voice assistant works without an API key using local answers and Wikipedia. To enable broader Siri-like answers, copy `.env.example` to `.env`, set `ALAM_AI_API_KEY`, and restart Vite. The key is read only by the Vite server and is never bundled into browser code. `ALAM_AI_BASE_URL` and `ALAM_AI_MODEL` can be changed for another OpenAI-compatible provider.
 
 To verify the production bundle:
 

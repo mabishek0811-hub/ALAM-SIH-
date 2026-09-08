@@ -1,18 +1,62 @@
 import { StrictMode, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
-  ArrowUpRight, Bell, Check, ChevronRight, CircleHelp, Factory, FileCheck2, Globe2,
-  Landmark, Leaf, MapPin, Menu, Mic, PackageCheck, Plus, RefreshCw, Route,
-  ShieldCheck, Sparkles, Truck, Users, X
+  ArrowUpRight, BarChart3, Bell, Check, ChevronRight, CircleHelp, Factory, FileCheck2, Globe2,
+  Landmark, Leaf, MapPin, Menu, Mic, Moon, PackageCheck, Plus, RefreshCw, Route,
+  ShieldCheck, Sparkles, Sun, Truck, Users, X
 } from 'lucide-react'
 import './styles.css'
+import './entry.css'
+import { VoiceOverlay } from './voice/VoiceOverlay'
+import { VoiceButton } from './voice/VoiceButton'
+import { BuyerMarketplace } from './BuyerMarketplace'
+import { SellerWorkspace } from './SellerWorkspace'
+import { routeVoiceCommand } from './voice/VoiceCommandRouter'
+import type { VoiceCommand } from './voice/types'
+import type { BuyerRequirement, Notification, Transaction } from './dataTypes'
+import { AnalyticsPage, LogisticsPage, NotificationsPage, RequirementsPage, TraceabilityPage, TransactionsPage, VerificationPage } from './FeaturePages'
 
 type Lang = 'en' | 'ta'
 type Role = 'producer' | 'buyer' | 'government'
-type View = 'overview' | 'batches' | 'routing' | 'aggregation' | 'network' | 'impact'
+type View = 'overview' | 'batches' | 'routing' | 'aggregation' | 'network' | 'impact' | 'transactions' | 'requirements' | 'logistics' | 'traceability' | 'analytics' | 'verification' | 'notifications'
+type Theme = 'light' | 'dark'
 type Batch = { id: string; producer: string; location: string; litres: number; mg: number; k: number; br: number; status: string; available: string }
+type AuthUser = { id: string; name: string; email: string; password: string; language: Lang; createdAt: string; profile?: 'seller' | 'buyer' }
+type AuthMode = 'login' | 'signup'
 
 type Copy = Record<string, string>
+const AUTH_USERS_KEY = 'alam-auth-users'
+const AUTH_SESSION_KEY = 'alam-current-user'
+const getStoredUsers = (): AuthUser[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(AUTH_USERS_KEY)
+    return raw ? JSON.parse(raw) as AuthUser[] : []
+  } catch {
+    return []
+  }
+}
+const saveUsers = (users: AuthUser[]) => {
+  if (typeof window !== 'undefined') localStorage.setItem(AUTH_USERS_KEY, JSON.stringify(users))
+}
+const exportUsersCsv = () => {
+  if (typeof window === 'undefined') return
+  const users = getStoredUsers()
+  const rows = [
+    ['id', 'name', 'email', 'language', 'createdAt'],
+    ...users.map((user) => [user.id, user.name, user.email, user.language, user.createdAt]),
+  ]
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'alam-users.csv'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
 const en: Copy = {
   overview: 'Overview', batches: 'My batches', routing: 'Routing engine', aggregation: 'Aggregation', network: 'Industrial network', impact: 'Impact studio',
   producer: 'Producer workspace', greeting: 'Good morning, Arul.', live: 'DEMO ENVIRONMENT', subtitle: 'Turn every litre of bittern into its most valuable next step.',
@@ -29,7 +73,7 @@ const en: Copy = {
   government: 'Government intelligence', districts: 'District activity', ledger: 'Utilisation ledger', economic: 'Economic impact', environmental: 'Environmental potential',
   govtSub: 'Traceable ecosystem intelligence for Tamil Nadu decision-makers.', registered: 'Registered producers', utilised: 'Bittern utilised', awaiting: 'Awaiting utilisation', transactions: 'Completed transactions', valueAdded: 'Value-added activity',
   scenario: 'SCENARIO MODEL', assumptions: 'Illustrative assumptions only. Not an official forecast.', potential: 'Potential environmental benefit', map: 'Tamil Nadu network', next: 'Next step',
-  createRequirement: 'Create requirement', activeDemand: 'ACTIVE DEMAND SIGNAL', required: 'Required', within: 'Within', compatibleSupply: 'COMPATIBLE SUPPLY', batchMatches: 'Batch matches', ruleBased: 'RULE-BASED', processorInterest: 'Processor interest', offerSubmitted: 'Offer submitted', producerResponse: 'Producer response', selectBatch: 'Select a compatible batch to start a traceable offer.', whyMatch: 'WHY THIS MATCH', sent: 'Sent', viewImpact: 'View impact', governmentTamilNadu: 'Tamil Nadu · GOVERNMENT INTELLIGENCE', adminView: 'ADMIN VIEW · READ ONLY', liveDemoData: 'LIVE DEMO DATA', traceableMovement: 'Traceable batch movement', export: 'Export', districtsActive: 'districts active', targetRate: 'target rate', availableOn: 'Available', availability: 'Availability', roleProducer: 'SALT PRODUCER', roleBuyer: 'INDUSTRIAL BUYER', roleGovernment: 'GOVERNMENT', batchLabel: 'Batch', producerLabel: 'Producer', destinationLabel: 'Destination', statusLabel: 'Status', highActivity: 'High activity', activeLabel: 'Active', emergingLabel: 'Emerging', productiveUse: 'litres moved toward productive use',
+  createRequirement: 'Create requirement', activeDemand: 'ACTIVE DEMAND SIGNAL', required: 'Required', within: 'Within', compatibleSupply: 'COMPATIBLE SUPPLY', batchMatches: 'Batch matches', ruleBased: 'RULE-BASED', processorInterest: 'Processor interest', offerSubmitted: 'Offer submitted', producerResponse: 'Producer response', selectBatch: 'Select a compatible batch to start a traceable offer.', whyMatch: 'WHY THIS MATCH', sent: 'Sent', viewImpact: 'View impact', governmentTamilNadu: 'Tamil Nadu · GOVERNMENT INTELLIGENCE', adminView: 'ADMIN VIEW · READ ONLY', liveDemoData: 'LIVE DEMO DATA', traceableMovement: 'Traceable batch movement', export: 'Export', districtsActive: 'districts active', targetRate: 'target rate', availableOn: 'Available', availability: 'Availability', roleProducer: 'SALT PRODUCER', roleBuyer: 'INDUSTRIAL BUYER', roleGovernment: 'GOVERNMENT', batchLabel: 'Batch', producerLabel: 'Producer', destinationLabel: 'Destination', statusLabel: 'Status', highActivity: 'High activity', activeLabel: 'Active', emergingLabel: 'Emerging', productiveUse: 'litres moved toward productive use', themeLight: 'Light theme', themeDark: 'Dark theme',
 }
 const ta: Copy = {
   overview: 'மேலோட்டம்', batches: 'என் தொகுதிகள்', routing: 'வழித்தட இயந்திரம்', aggregation: 'திரட்டல்', network: 'தொழில் வலையமைப்பு', impact: 'தாக்க மையம்',
@@ -47,13 +91,20 @@ const ta: Copy = {
   government: 'அரசு நுண்ணறிவு', districts: 'மாவட்ட செயல்பாடு', ledger: 'பயன்பாட்டு பதிவு', economic: 'பொருளாதார தாக்கம்', environmental: 'சுற்றுச்சூழல் வாய்ப்பு',
   govtSub: 'தமிழ்நாடு முடிவெடுப்போருக்கான கண்காணிக்கக்கூடிய சூழல் நுண்ணறிவு.', registered: 'பதிவு செய்த உற்பத்தியாளர்கள்', utilised: 'பயன்படுத்தப்பட்ட பிடர்ன்', awaiting: 'பயன்பாட்டிற்காக காத்திருப்பவை', transactions: 'முடிந்த பரிவர்த்தனைகள்', valueAdded: 'மதிப்பு சேர்க்கப்பட்ட செயல்பாடு',
   scenario: 'சூழல் மாதிரி', assumptions: 'விளக்க அனுமானங்கள் மட்டுமே. அதிகாரப்பூர்வ கணிப்பு அல்ல.', potential: 'சாத்தியமான சுற்றுச்சூழல் நன்மை', map: 'தமிழ்நாடு வலையமைப்பு', next: 'அடுத்த படி',
-  createRequirement: 'தேவையை உருவாக்கு', activeDemand: 'செயலில் உள்ள தேவை', required: 'தேவை', within: 'இதற்குள்', compatibleSupply: 'பொருத்தமான விநியோகம்', batchMatches: 'தொகுதி பொருத்தங்கள்', ruleBased: 'விதி அடிப்படையிலானது', processorInterest: 'செயலாக்குநர் ஆர்வம்', offerSubmitted: 'சலுகை சமர்ப்பிக்கப்பட்டது', producerResponse: 'உற்பத்தியாளர் பதில்', selectBatch: 'கண்காணிக்கக்கூடிய சலுகையைத் தொடங்க பொருத்தமான தொகுதியைத் தேர்ந்தெடுக்கவும்.', whyMatch: 'இந்த பொருத்தம் ஏன்', sent: 'அனுப்பப்பட்டது', viewImpact: 'தாக்கத்தை காண்க', governmentTamilNadu: 'தமிழ்நாடு · அரசு நுண்ணறிவு', adminView: 'நிர்வாக பார்வை · வாசிக்க மட்டும்', liveDemoData: 'நேரடி டெமோ தரவு', traceableMovement: 'கண்காணிக்கக்கூடிய தொகுதி நகர்வு', export: 'ஏற்றுமதி', districtsActive: 'செயலில் உள்ள மாவட்டங்கள்', targetRate: 'இலக்கு விகிதம்', availableOn: 'கிடைக்கும்', availability: 'கிடைக்கும் நிலை', roleProducer: 'உப்பு உற்பத்தியாளர்', roleBuyer: 'தொழில்துறை வாங்குபவர்', roleGovernment: 'அரசு', batchLabel: 'தொகுதி', producerLabel: 'உற்பத்தியாளர்', destinationLabel: 'இலக்கு', statusLabel: 'நிலை', highActivity: 'அதிக செயல்பாடு', activeLabel: 'செயலில்', emergingLabel: 'வளர்ந்து வரும்', productiveUse: 'லிட்டர்கள் பயனுள்ள பயன்பாட்டை நோக்கி நகர்த்தப்பட்டன',
+  createRequirement: 'தேவையை உருவாக்கு', activeDemand: 'செயலில் உள்ள தேவை', required: 'தேவை', within: 'இதற்குள்', compatibleSupply: 'பொருத்தமான விநியோகம்', batchMatches: 'தொகுதி பொருத்தங்கள்', ruleBased: 'விதி அடிப்படையிலானது', processorInterest: 'செயலாக்குநர் ஆர்வம்', offerSubmitted: 'சலுகை சமர்ப்பிக்கப்பட்டது', producerResponse: 'உற்பத்தியாளர் பதில்', selectBatch: 'கண்காணிக்கக்கூடிய சலுகையைத் தொடங்க பொருத்தமான தொகுதியைத் தேர்ந்தெடுக்கவும்.', whyMatch: 'இந்த பொருத்தம் ஏன்', sent: 'அனுப்பப்பட்டது', viewImpact: 'தாக்கத்தை காண்க', governmentTamilNadu: 'தமிழ்நாடு · அரசு நுண்ணறிவு', adminView: 'நிர்வாக பார்வை · வாசிக்க மட்டும்', liveDemoData: 'நேரடி டெமோ தரவு', traceableMovement: 'கண்காணிக்கக்கூடிய தொகுதி நகர்வு', export: 'ஏற்றுமதி', districtsActive: 'செயலில் உள்ள மாவட்டங்கள்', targetRate: 'இலக்கு விகிதம்', availableOn: 'கிடைக்கும்', availability: 'கிடைக்கும் நிலை', roleProducer: 'உப்பு உற்பத்தியாளர்', roleBuyer: 'தொழில்துறை வாங்குபவர்', roleGovernment: 'அரசு', batchLabel: 'தொகுதி', producerLabel: 'உற்பத்தியாளர்', destinationLabel: 'இலக்கு', statusLabel: 'நிலை', highActivity: 'அதிக செயல்பாடு', activeLabel: 'செயலில்', emergingLabel: 'வளர்ந்து வரும்', productiveUse: 'லிட்டர்கள் பயனுள்ள பயன்பாட்டை நோக்கி நகர்த்தப்பட்டன', themeLight: 'வெளிச்ச தீம்', themeDark: 'இருள் தீம்',
 }
 const batchesSeed: Batch[] = [
   { id: 'BT-1042', producer: 'Arul Salt Works', location: 'Thoothukudi', litres: 10000, mg: 8.4, k: 3.2, br: 1.8, status: 'Listed', available: '18 Sep 2026' },
   { id: 'BT-1038', producer: 'Meenakshi Pan', location: 'Thoothukudi', litres: 5000, mg: 8.1, k: 3.4, br: 1.7, status: 'Listed', available: '19 Sep 2026' },
   { id: 'BT-1031', producer: 'Seabird Salts', location: 'Ramanathapuram', litres: 8000, mg: 8.7, k: 3.1, br: 1.9, status: 'Listed', available: '20 Sep 2026' },
   { id: 'BT-1027', producer: 'Coastal White', location: 'Nagapattinam', litres: 7000, mg: 6.2, k: 4.3, br: 1.2, status: 'Matched', available: '22 Sep 2026' },
+]
+const transactionsSeed: Transaction[] = [{ id: 'TX-1001', batchId: 'BT-1042', buyer: 'MagCore Industries', producer: 'Arul Salt Works', litres: 10000, price: 11.8, status: 'Accepted', updatedAt: 'Today, 09:42', note: 'Pickup window requested for 18 Sep 2026.' }]
+const requirementsSeed: BuyerRequirement[] = [{ id: 'REQ-204', buyer: 'MagCore Industries', material: 'Magnesium recovery', litres: 15000, minMg: 7.5, district: 'Thoothukudi', deadline: '30 Sep 2026', status: 'Active' }]
+const notificationsSeed: Notification[] = [
+  { id: 'N-1', title: 'Offer accepted by MagCore Industries', detail: 'BT-1042 is ready for pickup scheduling.', time: '12 min ago', read: false, tone: 'green' },
+  { id: 'N-2', title: 'New demand signal', detail: 'A processor needs 15,000 L within 100 km.', time: '1 hour ago', read: false, tone: 'orange' },
+  { id: 'N-3', title: 'Aggregation opportunity found', detail: 'Three nearby batches can form a processor-ready consignment.', time: 'Yesterday', read: true, tone: 'blue' },
 ]
 
 function scoreRoutes(batch: Batch) {
@@ -67,49 +118,337 @@ function scoreRoutes(batch: Batch) {
 function money(value: number) { return `₹${(value / 1000).toFixed(0)}k` }
 
 function App() {
-  const [lang, setLang] = useState<Lang>('en')
+  const [lang, setLang] = useState<Lang>(() => {
+    if (typeof window === 'undefined') return 'en'
+    const saved = localStorage.getItem('alam-language')
+    return saved === 'ta' ? 'ta' : 'en'
+  })
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return 'light'
+    const saved = localStorage.getItem('alam-theme')
+    return saved === 'dark' ? 'dark' : 'light'
+  })
+  const [session, setSession] = useState<AuthUser | null>(() => {
+    if (typeof window === 'undefined') return null
+    const raw = localStorage.getItem(AUTH_SESSION_KEY)
+    return raw ? JSON.parse(raw) as AuthUser : null
+  })
+  const [authMode, setAuthMode] = useState<AuthMode>('signup')
+  const [authName, setAuthName] = useState('')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authLanguage, setAuthLanguage] = useState<Lang>(session?.language ?? lang)
+  const [languageReady, setLanguageReady] = useState(false)
+  const [authError, setAuthError] = useState('')
   const [view, setView] = useState<View>('overview')
-  const [role, setRole] = useState<Role>('producer')
-  const [batches, setBatches] = useState(batchesSeed)
+  const [role, setRole] = useState<Role>(() => session?.profile === 'buyer' ? 'buyer' : 'producer')
+  const [batches, setBatches] = useState<Batch[]>(() => { try { const raw = localStorage.getItem('alam-batches'); return raw ? JSON.parse(raw) as Batch[] : batchesSeed } catch { return batchesSeed } })
   const [demoStep, setDemoStep] = useState(4)
-  const [offerAccepted, setOfferAccepted] = useState(false)
+  const [transactions, setTransactions] = useState<Transaction[]>(() => { try { const raw = localStorage.getItem('alam-transactions'); return raw ? JSON.parse(raw) as Transaction[] : transactionsSeed } catch { return transactionsSeed } })
+  const [requirements, setRequirements] = useState<BuyerRequirement[]>(() => { try { const raw = localStorage.getItem('alam-requirements'); return raw ? JSON.parse(raw) as BuyerRequirement[] : requirementsSeed } catch { return requirementsSeed } })
+  const [notifications, setNotifications] = useState<Notification[]>(() => { try { const raw = localStorage.getItem('alam-notifications'); return raw ? JSON.parse(raw) as Notification[] : notificationsSeed } catch { return notificationsSeed } })
+  const [showNotifications, setShowNotifications] = useState(false)
   const [showBatchForm, setShowBatchForm] = useState(false)
   const [showVoice, setShowVoice] = useState(false)
+  const [selectedBatchId, setSelectedBatchId] = useState('BT-1042')
+  const [batchFilter, setBatchFilter] = useState<'all' | 'active'>('all')
   const [mobileNav, setMobileNav] = useState(false)
-  const t = lang === 'en' ? en : ta
-  const selected = batches[0]
+  const activeLang = session?.language ?? lang
+  const t = activeLang === 'en' ? en : ta
+  const selected = batches.find((batch) => batch.id === selectedBatchId) ?? batches[0]
   const routes = useMemo(() => scoreRoutes(selected), [selected])
 
-  useEffect(() => { document.documentElement.lang = lang === 'ta' ? 'ta' : 'en' }, [lang])
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const utterance = new SpeechSynthesisUtterance(text); utterance.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'; window.speechSynthesis.speak(utterance) }
+  useEffect(() => {
+    document.documentElement.lang = activeLang === 'ta' ? 'ta' : 'en'
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('alam-theme', theme)
+    localStorage.setItem('alam-language', activeLang)
+  }, [activeLang, theme])
+
+  useEffect(() => { localStorage.setItem('alam-batches', JSON.stringify(batches)) }, [batches])
+  useEffect(() => { localStorage.setItem('alam-transactions', JSON.stringify(transactions)) }, [transactions])
+  useEffect(() => { localStorage.setItem('alam-requirements', JSON.stringify(requirements)) }, [requirements])
+  useEffect(() => { localStorage.setItem('alam-notifications', JSON.stringify(notifications)) }, [notifications])
+
+  useEffect(() => {
+    if (session) {
+      setLang(session.language)
+      setAuthLanguage(session.language)
+      if (session.profile) setRole(session.profile === 'buyer' ? 'buyer' : 'producer')
+    }
+  }, [session])
+
+  const handleAuthSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    const email = authEmail.trim().toLowerCase()
+    const name = authName.trim()
+    if (!email || !authPassword) {
+      setAuthError(activeLang === 'ta' ? 'மின்னஞ்சல் மற்றும் கடவுச்சொல் தேவை.' : 'Email and password are required.')
+      return
+    }
+
+    const users = getStoredUsers()
+    if (authMode === 'signup') {
+      if (!name) {
+        setAuthError(activeLang === 'ta' ? 'பெயரை உள்ளிடவும்.' : 'Please enter your full name.')
+        return
+      }
+      const existing = users.some((user) => user.email.toLowerCase() === email)
+      if (existing) {
+        setAuthError(activeLang === 'ta' ? 'இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது.' : 'This email is already registered.')
+        return
+      }
+      const nextUser: AuthUser = {
+        id: `user-${Date.now()}`,
+        name,
+        email,
+        password: authPassword,
+        language: authLanguage,
+        createdAt: new Date().toISOString(),
+      }
+      const nextUsers = [...users, nextUser]
+      saveUsers(nextUsers)
+      localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(nextUser))
+      setSession(nextUser)
+      setLang(nextUser.language)
+      exportUsersCsv()
+      setAuthError('')
+      return
+    }
+
+    const match = users.find((user) => user.email.toLowerCase() === email && user.password === authPassword)
+    if (!match) {
+      setAuthError(activeLang === 'ta' ? 'தவறான மின்னஞ்சல் அல்லது கடவுச்சொல்.' : 'Incorrect email or password.')
+      return
+    }
+
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(match))
+    setSession(match)
+    setLang(match.language)
+    setAuthError('')
   }
-  const reset = () => { setBatches(batchesSeed); setDemoStep(1); setOfferAccepted(false); setView('overview'); setRole('producer') }
-  const navItems: [View, string, typeof Route][] = [['overview', t.overview, Route], ['batches', t.batches, PackageCheck], ['routing', t.routing, Sparkles], ['aggregation', t.aggregation, Users], ['network', t.network, Factory], ['impact', t.impact, Leaf]]
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_SESSION_KEY)
+    setSession(null)
+    setAuthMode('login')
+    setAuthError('')
+    setAuthEmail('')
+    setAuthPassword('')
+  }
+
+  const handleProfileSelect = (profile: 'seller' | 'buyer') => {
+    if (!session) return
+    const updatedUser = { ...session, profile }
+    const users = getStoredUsers().map((user) => user.id === session.id ? updatedUser : user)
+    saveUsers(users)
+    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updatedUser))
+    setSession(updatedUser)
+    setRole(profile === 'buyer' ? 'buyer' : 'producer')
+  }
+
+  const reset = () => { setBatches(batchesSeed); setTransactions(transactionsSeed); setRequirements(requirementsSeed); setNotifications(notificationsSeed); setSelectedBatchId('BT-1042'); setBatchFilter('all'); setDemoStep(1); setView('overview'); setRole('producer') }
+  const executeVoiceCommand = async (command: VoiceCommand) => {
+    const action = await routeVoiceCommand(command, { role, lang: activeLang, batches, lastBatchId: selectedBatchId })
+    if (action.role) setRole(action.role)
+    if (action.view) setView(action.view)
+    if (action.batchId) setSelectedBatchId(action.batchId)
+    if (command.intent === 'GET_BATCHES') setBatchFilter('active')
+    if (action.openBatchForm) setShowBatchForm(true)
+    return { response: action.response, openBatchForm: action.openBatchForm }
+  }
+  const navItems: [View, string, typeof Route][] = role === 'buyer'
+    ? [['network', 'Marketplace', Factory], ['requirements', 'Requirements', Users], ['transactions', 'Transactions', PackageCheck], ['logistics', 'Logistics', Truck], ['traceability', 'Traceability', ShieldCheck], ['notifications', 'Notifications', Bell]]
+    : [['overview', t.overview, Route], ['batches', t.batches, PackageCheck], ['routing', t.routing, Sparkles], ['aggregation', t.aggregation, Users], ['network', t.network, Factory], ['impact', t.impact, Leaf], ['transactions', 'Transactions', PackageCheck], ['logistics', 'Logistics', Truck], ['traceability', 'Traceability', ShieldCheck], ['analytics', 'Analytics', BarChart3], ['verification', 'Verification', FileCheck2], ['notifications', 'Notifications', Bell]]
+
+  if (!session) {
+    if (!languageReady) {
+      return <LanguageScreen activeLang={authLanguage} setActiveLang={setAuthLanguage} onNext={() => setLanguageReady(true)} />
+    }
+    return <AuthScreen
+      activeLang={authLanguage}
+      setActiveLang={setAuthLanguage}
+      authMode={authMode}
+      setAuthMode={setAuthMode}
+      authName={authName}
+      setAuthName={setAuthName}
+      authEmail={authEmail}
+      setAuthEmail={setAuthEmail}
+      authPassword={authPassword}
+      setAuthPassword={setAuthPassword}
+      authError={authError}
+      setAuthError={setAuthError}
+      onBack={() => setLanguageReady(false)}
+      onSubmit={handleAuthSubmit}
+    />
+  }
+
+  if (!session.profile) {
+    return <ProfileScreen lang={activeLang} onSelect={handleProfileSelect} onBack={handleLogout} />
+  }
 
   return <div className="app-shell">
     <header className="topbar">
-      <div className="brand" onClick={() => setView('overview')}><div className="brand-mark">A</div><div><strong>ALAM</strong><span>BITTERN INTELLIGENCE</span></div></div>
+      <div className="brand" onClick={() => setView('overview')}><img className="brand-logo" src="/alam-logo.png" alt={activeLang === 'ta' ? 'அளம்' : 'ALAM'} /></div>
       <button className="mobile-menu" onClick={() => setMobileNav(!mobileNav)}><Menu size={20} /></button>
       <nav className={mobileNav ? 'main-nav open' : 'main-nav'}>{navItems.map(([key, label, Icon]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => { setView(key); setMobileNav(false) }}><Icon size={16} />{label}</button>)}</nav>
-      <div className="top-actions"><div className="language"><Globe2 size={15} /><button className={lang === 'en' ? 'selected' : ''} onClick={() => setLang('en')}>English</button><span>|</span><button className={lang === 'ta' ? 'selected' : ''} onClick={() => setLang('ta')}>தமிழ்</button></div><button className="icon-button" aria-label="Notifications"><Bell size={18} /><i /></button><button className="avatar">AS</button></div>
+      <div className="top-actions"><div className="language"><Globe2 size={15} /><button className={activeLang === 'en' ? 'selected' : ''} onClick={() => { setLang('en'); setSession((current) => current ? { ...current, language: 'en' } : current); if (session) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ ...session, language: 'en' })) }}>English</button><span>|</span><button className={activeLang === 'ta' ? 'selected' : ''} onClick={() => { setLang('ta'); setSession((current) => current ? { ...current, language: 'ta' } : current); if (session) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({ ...session, language: 'ta' })) }}>தமிழ்</button></div><button className="icon-button theme-toggle" aria-label={theme === 'light' ? t.themeDark : t.themeLight} title={theme === 'light' ? t.themeDark : t.themeLight} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}</button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setShowNotifications(!showNotifications)}><Bell size={18} />{notifications.some((item) => !item.read) && <i />}</button><button className="avatar" onClick={handleLogout} title={activeLang === 'ta' ? 'வெளியேறு' : 'Logout'}>{session.name.split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase() || 'AS'}</button><button className="mini-link-button" onClick={exportUsersCsv}>{activeLang === 'ta' ? 'CSV சேமி' : 'Export CSV'}</button></div>
     </header>
+    {showNotifications && <NotificationPanel lang={activeLang} notifications={notifications} onClose={() => setShowNotifications(false)} onRead={(id) => setNotifications((items) => items.map((item) => item.id === id ? { ...item, read: true } : item))} />}
     <main>
-      <div className="context-bar"><span><span className="status-dot" />{t.live}</span><span className="context-separator" /> <button onClick={() => { setRole(role === 'producer' ? 'buyer' : role === 'buyer' ? 'government' : 'producer'); setView('overview') }}>VIEW AS: <b>{role === 'producer' ? t.roleProducer : role === 'buyer' ? t.roleBuyer : t.roleGovernment}</b></button><button className="voice-pill" onClick={() => { setShowVoice(true); speak(lang === 'ta' ? 'வணக்கம். ALAM குரல் உதவிக்கு வரவேற்கிறோம்.' : 'Welcome to ALAM voice help.') }}><Mic size={15} /> {t.voice}</button><button className="reset-link" onClick={reset}><RefreshCw size={14} />{t.reset}</button></div>
-      {role === 'government' ? <Government t={t} lang={lang} /> : role === 'buyer' ? <Buyer t={t} onNavigate={setView} offerAccepted={offerAccepted} setOfferAccepted={setOfferAccepted} /> : <>
-        {view === 'overview' && <Overview t={t} batches={batches} setView={setView} routes={routes} demoStep={demoStep} setDemoStep={setDemoStep} />}
-        {view === 'batches' && <Batches t={t} batches={batches} onAdd={() => setShowBatchForm(true)} onRoute={() => setView('routing')} />}
-        {view === 'routing' && <Routing t={t} batch={selected} routes={routes} lang={lang} />}
+      <div className="context-bar"><span><span className="status-dot" />{t.live}</span><span className="context-separator" /> <button onClick={() => { const nextRole = role === 'producer' ? 'buyer' : role === 'buyer' ? 'government' : 'producer'; setRole(nextRole); setView(nextRole === 'buyer' ? 'network' : 'overview') }}>VIEW AS: <b>{role === 'producer' ? t.roleProducer : role === 'buyer' ? t.roleBuyer : t.roleGovernment}</b></button><button className="voice-pill" onClick={() => setShowVoice(true)}><Mic size={15} /> {t.voice}</button><button className="reset-link" onClick={reset}><RefreshCw size={14} />{t.reset}</button></div>
+      {role === 'government' ? <Government t={t} lang={activeLang} /> : <>
+        {view === 'overview' && <SellerWorkspace t={{ addBatch: t.addBatch, routeNow: t.routeNow, location: t.location }} sellerName={session.name} batches={batches} onAdd={() => setShowBatchForm(true)} onRoute={(id) => { setSelectedBatchId(id); setView('routing') }} />}
+        {view === 'batches' && <Batches t={t} batches={batches} filter={batchFilter} onFilterChange={setBatchFilter} onAdd={() => setShowBatchForm(true)} onRoute={(id) => { setSelectedBatchId(id); setView('routing') }} />}
+        {view === 'routing' && <Routing t={t} batch={selected} routes={routes} lang={activeLang} />}
         {view === 'aggregation' && <Aggregation t={t} batches={batches} setBatches={setBatches} />}
-        {view === 'network' && <Buyer t={t} onNavigate={setView} offerAccepted={offerAccepted} setOfferAccepted={setOfferAccepted} />}
+        {view === 'network' && <BuyerMarketplace lang={activeLang} transactions={transactions} setTransactions={setTransactions} requirements={requirements} setRequirements={setRequirements} onNavigate={setView} />}
         {view === 'impact' && <Impact t={t} />}
+        {view === 'transactions' && <TransactionsPage lang={activeLang} transactions={transactions} setTransactions={setTransactions} />}
+        {view === 'requirements' && <RequirementsPage lang={activeLang} requirements={requirements} setRequirements={setRequirements} />}
+        {view === 'logistics' && <LogisticsPage lang={activeLang} transactions={transactions} />}
+        {view === 'traceability' && <TraceabilityPage lang={activeLang} transactions={transactions} />}
+        {view === 'analytics' && <AnalyticsPage lang={activeLang} batches={batches} />}
+        {view === 'verification' && <VerificationPage lang={activeLang} />}
+        {view === 'notifications' && <NotificationsPage lang={activeLang} notifications={notifications} setNotifications={setNotifications} />}
       </>}
     </main>
     {showBatchForm && <BatchModal t={t} onClose={() => setShowBatchForm(false)} onSave={(batch) => { setBatches([batch, ...batches]); setShowBatchForm(false); setView('routing') }} />}
-    {showVoice && <VoicePanel t={t} lang={lang} onClose={() => setShowVoice(false)} speak={speak} />}
+    <VoiceButton lang={activeLang} onClick={() => setShowVoice(true)} />
+    {showVoice && <VoiceOverlay lang={activeLang} onClose={() => setShowVoice(false)} onExecute={executeVoiceCommand} />}
   </div>
 }
 
+function LanguageScreen({ activeLang, setActiveLang, onNext }: { activeLang: Lang; setActiveLang: (lang: Lang) => void; onNext: () => void }) {
+  const isTamil = activeLang === 'ta'
+  return <div className="entry-shell">
+    <div className="entry-glow entry-glow-one" />
+    <div className="entry-glow entry-glow-two" />
+    <div className="entry-layout">
+      <div className="entry-intro">
+        <div className="entry-brand"><img className="entry-logo" src="/alam-logo.png" alt={isTamil ? 'அளம்' : 'ALAM'} /></div>
+        <div className="entry-kicker">RESOURCE INTELLIGENCE PLATFORM</div>
+        <h1>{isTamil ? 'வளங்களை மதிப்பாக மாற்றுங்கள்.' : 'Turn every resource into its next possibility.'}</h1>
+        <p>{isTamil ? 'உங்கள் மொழியை தேர்ந்தெடுத்து அளம் உலகிற்குள் செல்லுங்கள்.' : 'A clearer way to connect bittern supply with meaningful industrial use.'}</p>
+        <div className="entry-proof"><span>01</span><div><b>{isTamil ? 'மொழியை தேர்ந்தெடுக்கவும்' : 'Choose your language'}</b><small>{isTamil ? 'உங்களுக்கு வசதியான மொழி' : 'Your experience, your language'}</small></div></div>
+      </div>
+      <section className="language-card" aria-labelledby="language-title">
+        <div className="language-card-top"><span className="step-label">STEP 01 / 02</span><Globe2 size={20} /></div>
+        <h2 id="language-title">{isTamil ? 'உங்கள் மொழியை தேர்ந்தெடுக்கவும்' : 'Choose your language'}</h2>
+        <p>{isTamil ? 'அளம் அனுபவம் முழுவதும் இதே மொழியில் இருக்கும்.' : 'Your ALAM experience will use this language throughout.'}</p>
+        <div className="language-options">
+          <button className={activeLang === 'en' ? 'language-option selected' : 'language-option'} onClick={() => setActiveLang('en')}><span className="language-symbol">EN</span><span><b>English</b><small>English interface</small></span><i>{activeLang === 'en' ? '✓' : ''}</i></button>
+          <button className={activeLang === 'ta' ? 'language-option selected' : 'language-option'} onClick={() => setActiveLang('ta')}><span className="language-symbol tamil">அ</span><span><b>தமிழ்</b><small>தமிழ் இடைமுகம்</small></span><i>{activeLang === 'ta' ? '✓' : ''}</i></button>
+        </div>
+        <button className="entry-next" onClick={onNext}>{isTamil ? 'தொடரவும்' : 'Continue'}<ChevronRight size={18} /></button>
+        <small className="entry-note">{isTamil ? 'பின்னர் அமைப்புகளில் மொழியை மாற்றலாம்.' : 'You can change this later from settings.'}</small>
+      </section>
+    </div>
+  </div>
+}
+
+function ProfileScreen({ lang, onSelect, onBack }: { lang: Lang; onSelect: (profile: 'seller' | 'buyer') => void; onBack: () => void }) {
+  const isTamil = lang === 'ta'
+  return <div className="entry-shell profile-entry-shell">
+    <div className="entry-glow entry-glow-one" />
+    <div className="entry-glow entry-glow-two" />
+    <section className="profile-card" aria-labelledby="profile-title">
+      <button className="back-language" onClick={onBack}><ChevronRight size={16} className="back-chevron" />{isTamil ? 'வெளியேறு' : 'Sign out'}</button>
+      <div className="profile-step"><span className="step-label">STEP 02 / 02</span><span className="profile-step-line"><i /></span></div>
+      <div className="profile-heading"><img className="profile-logo" src="/alam-logo.png" alt={isTamil ? 'அளம்' : 'ALAM'} /><div><div className="entry-kicker">{isTamil ? 'உங்கள் பணியிடம்' : 'YOUR WORKSPACE'}</div><h1 id="profile-title">{isTamil ? 'உங்கள் சுயவிவரத்தை தேர்ந்தெடுக்கவும்' : 'Choose your profile'}</h1></div></div>
+      <p className="profile-subtitle">{isTamil ? 'அளத்தில் உங்களுக்கு பொருந்தும் அனுபவத்தை அமைக்கவும்.' : 'Set up the ALAM experience around the work you do.'}</p>
+      <div className="profile-options">
+        <button className="profile-option seller" onClick={() => onSelect('seller')}><span className="profile-icon"><PackageCheck size={25} /></span><span><b>{isTamil ? 'விற்பனையாளர்' : 'Seller profile'}</b><small>{isTamil ? 'பிடர்ன் தொகுதிகளை பட்டியலிட்டு, சிறந்த பயன்பாட்டு வழியை கண்டறியுங்கள்.' : 'List bittern batches, discover routes, and connect with industrial demand.'}</small></span><ChevronRight size={18} /></button>
+        <button className="profile-option buyer" onClick={() => onSelect('buyer')}><span className="profile-icon"><Factory size={25} /></span><span><b>{isTamil ? 'வாங்குபவர்' : 'Buyer profile'}</b><small>{isTamil ? 'தேவையை உருவாக்கி, பொருத்தமான விநியோகத்தை கண்டறியுங்கள்.' : 'Create demand, discover compatible supply, and make traceable offers.'}</small></span><ChevronRight size={18} /></button>
+      </div>
+      <small className="entry-note">{isTamil ? 'பின்னர் சுயவிவரத்தை மாற்றலாம்.' : 'You can switch profiles later from the workspace.'}</small>
+    </section>
+  </div>
+}
+
+function AuthScreen({
+  activeLang,
+  setActiveLang,
+  authMode,
+  setAuthMode,
+  authName,
+  setAuthName,
+  authEmail,
+  setAuthEmail,
+  authPassword,
+  setAuthPassword,
+  authError,
+  setAuthError,
+  onBack,
+  onSubmit,
+}: {
+  activeLang: Lang
+  setActiveLang: (lang: Lang) => void
+  authMode: AuthMode
+  setAuthMode: (mode: AuthMode) => void
+  authName: string
+  setAuthName: (value: string) => void
+  authEmail: string
+  setAuthEmail: (value: string) => void
+  authPassword: string
+  setAuthPassword: (value: string) => void
+  authError: string
+  setAuthError: (value: string) => void
+  onBack: () => void
+  onSubmit: (event: React.FormEvent) => void
+}) {
+  const isTamil = activeLang === 'ta'
+  const heading = isTamil ? 'அளத்தைத் தொடங்குங்கள்' : 'Welcome to ALAM'
+  const sub = isTamil ? 'உங்கள் கணக்கை உருவாக்கி, உங்கள் விருப்ப மொழியை தேர்ந்தெடுத்து, தரவு பணிப்பாய்வை தொடங்குங்கள்.' : 'Create your account, choose your language, and begin the resource workflow.'
+
+  return <div className="entry-shell auth-entry-shell">
+    <div className="entry-glow entry-glow-one" />
+    <div className="entry-glow entry-glow-two" />
+    <div className="auth-card">
+      <button className="back-language" onClick={onBack}><ChevronRight size={16} className="back-chevron" />{isTamil ? 'மொழியை மாற்று' : 'Change language'}</button>
+      <div className="auth-brand">
+        <img className="auth-logo" src="/alam-logo.png" alt={isTamil ? 'அளம்' : 'ALAM'} />
+        <div>
+          <strong>{isTamil ? 'அளம்' : 'ALAM'}</strong>
+          <span>{isTamil ? 'பிடர்ன் வள நுண்ணறிவு' : 'BITTERN INTELLIGENCE'}</span>
+        </div>
+      </div>
+
+      <div className="auth-mode-toggle">
+        <button className={authMode === 'signup' ? 'selected' : ''} onClick={() => { setAuthMode('signup'); setAuthError('') }}>{isTamil ? 'சேருக' : 'Sign up'}</button>
+        <button className={authMode === 'login' ? 'selected' : ''} onClick={() => { setAuthMode('login'); setAuthError('') }}>{isTamil ? 'உள்நுழை' : 'Login'}</button>
+      </div>
+
+      <h1>{heading}</h1>
+      <p>{sub}</p>
+
+      <form className="auth-form" onSubmit={onSubmit}>
+        {authMode === 'signup' && <label>
+          <span>{isTamil ? 'முழுப் பெயர்' : 'Full name'}</span>
+          <input type="text" value={authName} onChange={(event) => setAuthName(event.target.value)} placeholder={isTamil ? 'உங்கள் பெயரை உள்ளிடவும்' : 'Enter your full name'} />
+        </label>}
+
+        <label>
+          <span>{isTamil ? 'மின்னஞ்சல்' : 'Email'}</span>
+          <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder={isTamil ? 'you@example.com' : 'you@example.com'} />
+        </label>
+
+        <label>
+          <span>{isTamil ? 'கடவுச்சொல்' : 'Password'}</span>
+          <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder={isTamil ? 'கடவுச்சொல்லை உள்ளிடவும்' : 'Enter your password'} />
+        </label>
+
+        {authError && <div className="auth-error">{authError}</div>}
+
+        <button type="submit" className="primary-button auth-submit">
+          {authMode === 'signup' ? (isTamil ? 'கணக்கை உருவாக்கு' : 'Create account') : (isTamil ? 'உள்நுழை' : 'Login')}
+        </button>
+      </form>
+    </div>
+  </div>
+}
+
+function NotificationPanel({ lang, notifications, onClose, onRead }: { lang: Lang; notifications: Notification[]; onClose: () => void; onRead: (id: string) => void }) { const isTamil = lang === 'ta'; return <div className="notification-panel"><div className="notification-heading"><div><span className="eyebrow">{isTamil ? 'அறிவிப்புகள்' : 'NOTIFICATIONS'}</span><h3>{isTamil ? 'சமீபத்திய செயல்பாடு' : 'Recent activity'}</h3></div><button onClick={onClose}><X size={16} /></button></div>{notifications.map((item) => <button className={item.read ? 'notification-row read' : 'notification-row'} key={item.id} onClick={() => onRead(item.id)}><span className={`notification-tone ${item.tone}`} /><span><b>{item.title}</b><small>{item.detail}</small><em>{item.time}</em></span>{!item.read && <i />}</button>)}</div> }
 function PageHeading({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub: string; action?: React.ReactNode }) { return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{sub}</p></div>{action}</div> }
 function Stat({ label, value, delta, icon: Icon, tone = 'navy' }: { label: string; value: string; delta?: string; icon: any; tone?: string }) { return <div className="stat-card"><div className={`stat-icon ${tone}`}><Icon size={19} /></div><div><span>{label}</span><strong>{value}</strong>{delta && <small>{delta}</small>}</div></div> }
 function Overview({ t, batches, setView, routes, demoStep, setDemoStep }: { t: Copy; batches: Batch[]; setView: (v: View) => void; routes: any[]; demoStep: number; setDemoStep: (s: number) => void }) { return <div className="page-wrap"><PageHeading eyebrow={t.producer} title={t.greeting} sub={t.subtitle} action={<button className="primary-button" onClick={() => setView('batches')}><Plus size={17} />{t.addBatch}</button>} />
@@ -119,7 +458,7 @@ function Overview({ t, batches, setView, routes, demoStep, setDemoStep }: { t: C
   <div className="demo-strip"><div><span className="demo-number">{demoStep}</span><div><b>SIH demo journey</b><span>Routing → aggregation → offer → government impact</span></div></div><div className="demo-steps">{['Batch', 'Route', 'Group', 'Offer', 'Impact'].map((step, i) => <button key={step} className={i + 1 <= demoStep ? 'done' : ''} onClick={() => { setDemoStep(i + 1); setView(i === 1 ? 'routing' : i === 2 ? 'aggregation' : i === 3 ? 'network' : i === 4 ? 'impact' : 'batches') }}><i>{i + 1 <= demoStep ? <Check size={11} /> : i + 1}</i>{step}</button>)}</div></div>
 </div> }
 function Activity({ icon: Icon, title, meta, tone }: { icon: any; title: string; meta: string; tone: string }) { return <div className="activity"><div className={`activity-icon ${tone}`}><Icon size={15} /></div><div><b>{title}</b><span>{meta}</span></div><ChevronRight size={15} /></div> }
-function Batches({ t, batches, onAdd, onRoute }: { t: Copy; batches: Batch[]; onAdd: () => void; onRoute: () => void }) { return <div className="page-wrap"><PageHeading eyebrow="SUPPLY REGISTRY" title={t.batches} sub="Every batch stays traceable from generation to industrial utilisation." action={<button className="primary-button" onClick={onAdd}><Plus size={17} />{t.addBatch}</button>} /><div className="batch-list">{batches.map((batch, i) => <div className="batch-card" key={batch.id}><div className="batch-id"><span className={`batch-status ${i === 0 ? 'active' : ''}`} /> <b>{batch.id}</b><small>{batch.status}</small></div><div className="batch-main"><div><span>{t.totalSupply}</span><strong>{batch.litres.toLocaleString()} L</strong></div><div><span>{t.location}</span><strong>{batch.location}</strong></div><div><span>Mg · K · Br</span><strong>{batch.mg}% · {batch.k}% · {batch.br}%</strong></div><div><span>Available</span><strong>{batch.available}</strong></div></div><button className="outline-button" onClick={onRoute}>{t.routeNow}<ArrowUpRight size={15} /></button></div>)}</div></div> }
+function Batches({ t, batches, filter, onFilterChange, onAdd, onRoute }: { t: Copy; batches: Batch[]; filter: 'all' | 'active'; onFilterChange: (filter: 'all' | 'active') => void; onAdd: () => void; onRoute: (id: string) => void }) { const visibleBatches = filter === 'active' ? batches.filter((batch) => batch.status === 'Listed' || batch.status === 'Matched') : batches; return <div className="page-wrap"><PageHeading eyebrow="SUPPLY REGISTRY" title={t.batches} sub="Every batch stays traceable from generation to industrial utilisation." action={<button className="primary-button" onClick={onAdd}><Plus size={17} />{t.addBatch}</button>} /><div className="batch-toolbar"><button className={filter === 'all' ? 'selected' : ''} onClick={() => onFilterChange('all')}>All batches</button><button className={filter === 'active' ? 'selected' : ''} onClick={() => onFilterChange('active')}>Active batches</button></div><div className="batch-list">{visibleBatches.map((batch) => <div className="batch-card" key={batch.id}><div className="batch-id"><span className={`batch-status ${batch.status === 'Listed' || batch.status === 'Matched' ? 'active' : ''}`} /> <b>{batch.id}</b><small>{batch.status}</small></div><div className="batch-main"><div><span>{t.totalSupply}</span><strong>{batch.litres.toLocaleString()} L</strong></div><div><span>{t.location}</span><strong>{batch.location}</strong></div><div><span>Mg · K · Br</span><strong>{batch.mg}% · {batch.k}% · {batch.br}%</strong></div><div><span>Available</span><strong>{batch.available}</strong></div></div><button className="outline-button" onClick={() => onRoute(batch.id)}>{t.routeNow}<ArrowUpRight size={15} /></button></div>)}</div></div> }
 function Routing({ t, batch, routes, lang }: { t: Copy; batch: Batch; routes: any[]; lang: Lang }) { const routeLabels = [t.magnesium, t.bromine, t.potassium]; return <div className="page-wrap"><PageHeading eyebrow="ALAM DECISION SUPPORT" title={t.routeTitle} sub={t.routeSub} action={<span className="estimate-badge"><ShieldCheck size={15} />{t.illustrative}</span>} /><div className="batch-banner"><div><span className="eyebrow">ACTIVE BATCH</span><h3>{batch.id} <i>·</i> {batch.litres.toLocaleString()} L</h3><p><MapPin size={14} />{batch.location} · Available {batch.available}</p></div><div className="composition-chips"><span>Mg <b>{batch.mg}%</b></span><span>K <b>{batch.k}%</b></span><span>Br <b>{batch.br}%</b></span><small>{t.producerData}</small></div></div><div className="routes-grid">{routes.map((route, i) => <div className={`route-card ${i === 0 ? 'recommended-card' : ''}`} key={route.name}><div className="route-card-top"><div className={`route-symbol ${route.color}`}>{i === 0 ? 'Mg' : i === 1 ? 'Br' : 'K'}</div><div><span className="route-label">{i === 0 && <Sparkles size={13} />}{i === 0 ? t.recommended : 'ALTERNATIVE PATH'}</span><h3>{routeLabels[i]}</h3></div><strong className="score">{route.score}%<small>{t.compatibility}</small></strong></div><div className="route-metrics"><Metric label={t.gross} value={money(route.gross)} /><Metric label={t.transport} value={money(route.transport)} /><Metric label={t.processing} value={money(route.processing)} /><Metric label={t.net} value={money(route.net)} accent /></div><div className="route-score"><div><span>{t.compatibility}</span><b>{route.score}%</b></div><div className="progress"><i style={{ width: `${route.score}%` }} /></div></div><button className={i === 0 ? 'primary-button full' : 'outline-button full'} onClick={() => {}}>{i === 0 ? `${t.recommended} · ${lang === 'ta' ? 'தேர்ந்தெடுக்கப்பட்டது' : 'Select route'}` : 'View pathway'}<ChevronRight size={15} /></button></div>)}</div><div className="panel factors-panel"><div className="panel-header"><div><div className="eyebrow">EXPLAINABLE RULE-BASED MODEL</div><h3>{t.factors}</h3></div><span className="formula">5 weighted signals · v0.1</span></div><div className="factor-grid">{[[t.composition, 95], [t.quantity, 90], [t.distance, 88], [t.demand, 94], [t.economics, 92]].map(([label, value]) => <div className="factor" key={label as string}><div><span>{label}</span><b>{value}%</b></div><div className="progress"><i style={{ width: `${value}%` }} /></div></div>)}</div></div></div> }
 function Metric({ label, value, accent }: { label: string; value: string; accent?: boolean }) { return <div className={accent ? 'metric accent' : 'metric'}><span>{label}</span><b>{value}</b></div> }
 function Aggregation({ t, batches, setBatches }: { t: Copy; batches: Batch[]; setBatches: (b: Batch[]) => void }) { const [created, setCreated] = useState(false); return <div className="page-wrap"><PageHeading eyebrow="SUPPLY CONSOLIDATION" title={t.aggregationTitle} sub={t.aggregationSub} action={<button className="primary-button" onClick={() => { setCreated(true); setBatches(batches.map(b => b.id === 'BT-1042' || b.id === 'BT-1038' || b.id === 'BT-1031' ? { ...b, status: 'In aggregation' } : b)) }}><Users size={17} />{t.createGroup}</button>} /><div className="aggregation-hero"><div className="aggregation-equation">{['BT-1042', 'BT-1038', 'BT-1031'].map((id, i) => <><div className="mini-batch" key={id}><span>{id}</span><b>{[10, 5, 8][i]},000 L</b><small>{batches[i]?.location}</small></div>{i < 2 && <span className="plus">+</span>}</>)}<span className="equals">=</span><div className="aggregate-result"><span>AGGREGATED BATCH</span><b>23,000 L</b><small>{created ? 'GROUP AG-2207 · READY' : 'PROCESSOR-READY TARGET'}</small></div></div></div><div className="content-grid aggregation-grid"><section className="panel"><div className="panel-header"><div><div className="eyebrow">{t.findCompatible}</div><h3>3 compatible producers</h3></div><span className="match-badge">94% MATCH</span></div>{batches.slice(0, 3).map(b => <div className="producer-line" key={b.id}><div className="mini-avatar">{b.producer.slice(0, 2).toUpperCase()}</div><div><b>{b.producer}</b><span>{b.location} · {b.litres.toLocaleString()} L</span></div><strong>{b.mg}% Mg</strong><Check size={16} className="check" /></div>)}</section><section className="panel logistics-panel"><div className="eyebrow">AGGREGATION ECONOMICS</div><h3>One truck. Three sources.</h3><div className="logistics-row"><Truck size={18} /><div><span>{t.logistics}</span><b>₹18,400</b></div></div><div className="logistics-row"><MapPin size={18} /><div><span>Average collection radius</span><b>42 km</b></div></div><div className="logistics-row"><Factory size={18} /><div><span>{t.match}</span><b>MagCore Industries</b></div></div><p className="notice"><ShieldCheck size={15} /> Grouping reduces estimated logistics cost by 31%.</p></section></div></div> }

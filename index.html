@@ -7,6 +7,12 @@
     <title>ALAM | Bittern Resource Intelligence</title>
   </head>
   <body>
+    <script>
+      (function () {
+        var theme = localStorage.getItem('alam-theme')
+        if (theme === 'dark') document.documentElement.dataset.theme = 'dark'
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
